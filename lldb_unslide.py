@@ -39,7 +39,6 @@ def unslide(debugger, command, result, internal_dict):
     parser.add_argument("addr", type=Address, nargs="+", help="address to unslide")
 
     args = parser.parse_args(shlex.split(command))
-    print(args)
 
     tgt = debugger.GetSelectedTarget()
 
