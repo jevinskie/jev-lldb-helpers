@@ -29,10 +29,24 @@ def offset_in_module(tgt, mod, addr):
     return None, None
 
 
+def copy_to_clipboard(val: str, result):
+    try:
+        import pyperclip
+
+        pyperclip.copy(val)
+    except ImportError:
+        result.AppendWarning(
+            "pyperclip is not installed! Install with `xcrun pip3 install -U pyperclip`"
+        )
+
+
 def unslide(debugger, command, result, internal_dict):
     parser = argparse.ArgumentParser(prog="unslide", description="unslide address")
     parser.add_argument(
-        "addr_expr_part", nargs="+", help="Part of an address expressison to unslide"
+        "-c", "--copy", action="store_true", help="copy unslid address to clipboard"
+    )
+    parser.add_argument(
+        "addr_expr_part", nargs="+", help="part of an address expressison to unslide"
     )
 
     args = parser.parse_args(shlex.split(command))
@@ -49,6 +63,8 @@ def unslide(debugger, command, result, internal_dict):
             result.AppendMessage(
                 f"{addr:#018x} => {mod.file.GetFilename()}:{offset:#x} {faddr:#018x}\t\t{mod.file.GetDirectory()}/{mod.file.GetFilename()}\n"
             )
+            if args.copy:
+                copy_to_clipboard(f"{faddr:#018x}", result)
             break
     else:
         result.AppendWarning(f"{addr:#018x} can't be resolved\n")
