@@ -1,0 +1,6 @@
+# VS Code
+**/.vscode/
+**/.vscode-ctags
+
+dump-mem-test
+**/*.dSYM

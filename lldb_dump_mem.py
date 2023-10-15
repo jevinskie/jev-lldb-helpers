@@ -1,47 +1,70 @@
-# import commands
-import optparse
+import argparse
 import shlex
 
 import lldb
 
+from unsigned_expr_action import UnsignedExpressionAction
+
 
 def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand("command script add -f lldb_dump_mem.dump_mem dump_mem")
-    # print('dump_mem command added')
 
 
-def create_dump_mem_options():
-    usage = "usage: %prog [options]"
-    description = """Dump <size> bytes of memory from <address> to <file>"""
-    parser = optparse.OptionParser(description=description, prog="dump_mem", usage=usage)
-    parser.add_option("-a", "--address", type="int", dest="address", help="Address to dump.")
-    parser.add_option("-s", "--size", type="int", dest="size", help="Size of dump.")
-    parser.add_option("-f", "--file", type="string", dest="path", help="File to dump into.")
+def get_argparse_parser(debugger, result):
+    class CustomHelpFormatter(argparse.HelpFormatter):
+        def _format_args(self, action, default_metavar):
+            if action.dest == "address":
+                return self._metavar_formatter(action, None)(1)[0]
+            else:
+                return super(CustomHelpFormatter, self)._format_args(action, default_metavar)
 
+    parser = argparse.ArgumentParser(
+        description="Dump <SIZE EXPRESSION> bytes of memory from <ADDRESS EXPRESSION> to <FILE>",
+        prog="dump_mem",
+        formatter_class=CustomHelpFormatter,
+    )
+    parser.lldb_debugger = debugger
+    parser.lldb_result = result
+    parser.add_argument(
+        "address",
+        metavar="<ADDRESS EXPRESSION>",
+        nargs="+",
+        action=UnsignedExpressionAction,
+        help="Address expression to start dumping from. Can be decimal, hex, octal, binary or a complex expression.",
+    )
+    parser.add_argument(
+        "-s",
+        "--size",
+        metavar="<SIZE EXPRESSION>",
+        action=UnsignedExpressionAction,
+        type=lambda s: shlex.split(s),
+        required=True,
+        help="Size of dump expression. Can be decimal, hex, octal, binary or a *quoted* complex expression.",
+    )
+    parser.add_argument("-f", "--file", required=True, help="File to dump into.")
     return parser
 
 
 def dump_mem(debugger, command, result, internal_dict):
-    print("dump_mem run")
-    command_args = shlex.split(command)
-    parser = create_dump_mem_options()
-
-    try:
-        (options, args) = parser.parse_args(command_args)
-
-    except:
-        # if you don't handle exceptions, passing an incorrect argument to the OptionParser will cause LLDB to exit
-        result.SetError("option parsing failed")
+    parser = get_argparse_parser(debugger, result)
+    args = parser.parse_args(shlex.split(command))
+    if not result.Succeeded():
         return
-    print(options)
 
     error_ref = lldb.SBError()
     process = debugger.GetSelectedTarget().GetProcess()
-    memory = process.ReadMemory(options.address, options.size, error_ref)
+    memory = process.ReadMemory(args.address, args.size, error_ref)
     if error_ref.Success():
-        with open(options.path, "wb") as dumpf:
-            dumpf.write(memory)
+        try:
+            with open(args.file, "wb") as dumpf:
+                dumpf.write(memory)
+                result.AppendMessage(f"Dumped {args.size:#0x} bytes from {args.address:#018x}")
+                result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
+        except Exception as e:
+            result.SetError(
+                f"Failed writing memory dump of {args.size:#0x} bytes from address {args.address:#018x} to '{args.file}'.\nGot exception:\n{e}"
+            )
+            result.SetStatus(lldb.eReturnStatusFailed)
     else:
-        result.AppendString(str(error_ref))
-
-    return
+        result.SetError(error_ref)
+        result.SetStatus(lldb.eReturnStatusFailed)

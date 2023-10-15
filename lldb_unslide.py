@@ -3,8 +3,7 @@ import shlex
 
 import lldb
 
-# (lldb) unslide 0x1005b7d10
-# 0x00000001005b7d10 => libfoo.dylib:0x3bd10 0x000000010003bd10		/Users/jevin/code/libfoo.dylib
+from unsigned_expr_action import UnsignedExpressionAction
 
 
 def __lldb_init_module(debugger, internal_dict):
@@ -40,31 +39,59 @@ def copy_to_clipboard(val: str, result):
         )
 
 
+def get_argparse_parser(debugger, result):
+    class CustomHelpFormatter(argparse.RawDescriptionHelpFormatter):
+        def _format_args(self, action, default_metavar):
+            if action.dest == "address":
+                return self._metavar_formatter(action, None)(1)[0]
+            else:
+                return super(CustomHelpFormatter, self)._format_args(action, default_metavar)
+
+    parser = argparse.ArgumentParser(
+        prog="unslide",
+        description="""\
+unslide address(es)
+
+Example:
+
+(lldb) unslide 0x1005b7d10
+0x00000001005b7d10 => libfoo.dylib:0x3bd10 0x000000010003bd10\t\t/Users/jevin/code/libfoo.dylib\
+""",
+        formatter_class=CustomHelpFormatter,
+    )
+    parser.lldb_debugger = debugger
+    parser.lldb_result = result
+    parser.add_argument(
+        "-c", "--copy", action="store_true", help="Copy unslid address to clipboard"
+    )
+    parser.add_argument(
+        "address",
+        metavar="<ADDRESS EXPRESSION>",
+        nargs="+",
+        action=UnsignedExpressionAction,
+        help="Address expression to start dumping from. Can be decimal, hex, octal, binary or a complex expression.",
+    )
+    return parser
+
+
 def unslide(debugger, command, result, internal_dict):
-    parser = argparse.ArgumentParser(prog="unslide", description="unslide address")
-    parser.add_argument(
-        "-c", "--copy", action="store_true", help="copy unslid address to clipboard"
-    )
-    parser.add_argument(
-        "addr_expr_part", nargs="+", help="part of an address expressison to unslide"
-    )
-
+    parser = get_argparse_parser(debugger, result)
     args = parser.parse_args(shlex.split(command))
+    if not result.Succeeded():
+        return
 
-    tgt = debugger.GetSelectedTarget()
-    addr_expr_str = " ".join(args.addr_expr_part)
-    addr_val = tgt.EvaluateExpression(addr_expr_str)
-    addr = addr_val.GetValueAsUnsigned()
-
-    for mod in tgt.modules:
-        low_faddr, offset = offset_in_module(tgt, mod, addr)
+    target = debugger.GetSelectedTarget()
+    for mod in target.modules:
+        low_faddr, offset = offset_in_module(target, mod, args.address)
         if low_faddr is not None:
             faddr = low_faddr + offset
             result.AppendMessage(
-                f"{addr:#018x} => {mod.file.GetFilename()}:{offset:#x} {faddr:#018x}\t\t{mod.file.GetDirectory()}/{mod.file.GetFilename()}\n"
+                f"{args.address:#018x} => {mod.file.GetFilename()}:{offset:#x} {faddr:#018x}\t\t{mod.file.GetDirectory()}/{mod.file.GetFilename()}\n"
             )
             if args.copy:
                 copy_to_clipboard(f"{faddr:#018x}", result)
+            result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
             break
     else:
-        result.AppendWarning(f"{addr:#018x} can't be resolved\n")
+        result.SetError(f"{args.address:#018x} can't be resolved\n")
+        result.SetStatus(lldb.eReturnStatusFailed)
