@@ -16,7 +16,7 @@ def get_argparse_parser(debugger, result):
             if action.dest == "address":
                 return self._metavar_formatter(action, None)(1)[0]
             else:
-                return super(CustomHelpFormatter, self)._format_args(action, default_metavar)
+                return super()._format_args(action, default_metavar)
 
     parser = argparse.ArgumentParser(
         description="Dump <SIZE EXPRESSION> bytes of memory from <ADDRESS EXPRESSION> to <FILE>",
@@ -58,7 +58,9 @@ def dump_mem(debugger, command, result, internal_dict):
         try:
             with open(args.file, "wb") as dumpf:
                 dumpf.write(memory)
-                result.AppendMessage(f"Dumped {args.size:#0x} bytes from {args.address:#018x}")
+                result.AppendMessage(
+                    f"Dumped {args.size:#0x} bytes from {args.address:#018x}"
+                )
                 result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
         except Exception as e:
             result.SetError(

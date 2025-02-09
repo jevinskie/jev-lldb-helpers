@@ -45,7 +45,7 @@ def get_argparse_parser(debugger, result):
             if action.dest == "address":
                 return self._metavar_formatter(action, None)(1)[0]
             else:
-                return super(CustomHelpFormatter, self)._format_args(action, default_metavar)
+                return super()._format_args(action, default_metavar)
 
     parser = argparse.ArgumentParser(
         prog="unslide",

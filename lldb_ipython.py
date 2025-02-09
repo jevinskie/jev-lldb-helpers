@@ -1,11 +1,7 @@
 import argparse
-import shlex
 import sys
 
 import IPython
-import lldb
-from rich import inspect as rinspect
-from rich import print as rprint
 from traitlets.config import Config
 
 
@@ -19,8 +15,8 @@ def get_argparse_parser():
 
 
 def ipython(debugger, command, result, internal_dict):
-    parser = get_argparse_parser()
-    args = parser.parse_args(shlex.split(command))
+    # parser = get_argparse_parser()
+    # args = parser.parse_args(shlex.split(command))
 
     # rinspect(internal_dict, all=True)
     # rprint(internal_dict.keys())
